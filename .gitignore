@@ -1,0 +1,54 @@
+# -----------------------
+# Node.js (Backend + worker)
+# -----------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# -----------------------
+# Build / cache
+# -----------------------
+dist/
+build/
+.cache/
+
+# -----------------------
+# Docker
+# -----------------------
+docker/backups/*.dump
+docker/backups/*.sql
+
+# If you don’t want backups tracked at all:
+# docker/backups/
+
+# -----------------------
+# Redis (optional)
+# -----------------------
+redis-docker/data/
+
+# -----------------------
+# IDE / Editor
+# -----------------------
+.vscode/
+.idea/
+
+# -----------------------
+# Misc
+# -----------------------
+coverage/
+tmp/
