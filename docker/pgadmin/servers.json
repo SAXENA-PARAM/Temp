@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "PostGIS DB",
+      "Group": "Servers",
+      "Host": "postgis",
+      "Port": 5432,
+      "MaintenanceDB": "aquametric",
+      "Username": "postgres",
+      "SSLMode": "prefer"
+    }
+  }
+}

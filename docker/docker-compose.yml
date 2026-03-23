@@ -1,0 +1,38 @@
+
+
+services:
+  postgis:
+    image: postgis/postgis:18-3.6
+    platform: linux/amd64
+    container_name: postgis-mvt
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aquametric
+    volumes:
+      - postgis_data:/var/lib/postgresql   # ✅ DB storage (correct for v18)
+      - ./backups:/backups                 # ✅ dump storage
+      - ./initdb/restore.sh:/docker-entrypoint-initdb.d/20_restore.sh 
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin-mvt
+    restart: always
+    depends_on:
+      - postgis
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin   # ✅ pgAdmin persistence
+      - ./pgadmin/servers.json:/pgadmin4/servers.json 
+
+volumes:
+  postgis_data:
+  pgadmin_data:

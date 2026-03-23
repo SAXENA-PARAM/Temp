@@ -1,0 +1,19 @@
+services:
+  wqi-worker:
+    build: .
+    container_name: wqi_worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      PARAMETERS_XLSX: /app/Parameters.xlsx
+    volumes:
+      - ./Parameters.xlsx:/app/Parameters.xlsx:ro
+    env_file:
+      - .env
+    networks:
+      - wqi_network
+
+networks:
+  wqi_network:
+    external: true
