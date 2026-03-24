@@ -120,7 +120,7 @@ export const getMarkerYears = asyncHandler(async (req, res) => {
 
 export const getUserSubmissions = asyncHandler(async (req, res) => {
 
-    const userId = req.user.id;
+    const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";;
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -159,7 +159,7 @@ export const getUserSubmissions = asyncHandler(async (req, res) => {
 export const getSubmissionLakes = asyncHandler(async (req, res) => {
 
     const { submission_id } = req.params;
-    const userId = req.user.id;
+     const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";
 
     if (!submission_id) {
         throw new ApiError(400, "submission_id required");
@@ -183,7 +183,7 @@ export const getSubmissionLakes = asyncHandler(async (req, res) => {
 
     let lakes;
 
-    if (status === "pending" || status === "processing") {
+    if (status === "pending" || status === "processing" || status==="error") {
 
         lakes = await pool.query(
             `
@@ -232,7 +232,7 @@ export const getSubmissionMarkers = asyncHandler(async (req, res) => {
     const { submission_id } = req.params;
     const { lake_id } = req.query;
 
-    const userId = req.user.id;
+     const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -265,7 +265,7 @@ export const getSubmissionMarkers = asyncHandler(async (req, res) => {
     let markers;
 
     // pending / processing markers
-    if (status === "pending" || status === "processing") {
+    if (status === "pending" || status === "processing" || status==="error") {
 
         markers = await pool.query(
             `

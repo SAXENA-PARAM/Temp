@@ -108,14 +108,16 @@ const MARKER_QUERY = `
   SELECT ST_AsMVT(tile, 'markers', 4096, 'geom') AS mvt
   FROM (
     SELECT
-      id,
-      lake_id,
-      wqi   AS avg_wqi,
-      FALSE AS is_cluster,
-      1     AS point_count,
-      ST_AsMVTGeom(geom_3857, bounds.geom, 4096, 64, true) AS geom
-    FROM latest_markers, bounds
-    WHERE geom_3857 && bounds.geom
+      m.id,
+      m.lake_id,
+      m.wqi        AS wqi,
+      ST_Y(m.geom) AS lat,
+      ST_X(m.geom) AS lng,
+      FALSE        AS is_cluster,
+      1            AS point_count,
+      ST_AsMVTGeom(m.geom_3857, bounds.geom, 4096, 64, true) AS geom
+    FROM latest_markers m, bounds
+    WHERE m.geom_3857 && bounds.geom
   ) tile
   WHERE geom IS NOT NULL
 `;
