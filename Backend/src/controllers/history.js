@@ -26,7 +26,7 @@ const { lake_id, lat, lng } = req.query;
             created_at
         FROM lake_marker_history
         WHERE lake_id = $1
-        AND geom = ST_SetSRID(ST_Point($2,$3),4326)
+        AND  ST_DWithin(geom, ST_SetSRID(ST_Point($2, $3), 4326), 1e-8)
         ORDER BY created_at DESC
         LIMIT $4 OFFSET $5
         `,
@@ -48,70 +48,143 @@ const { lake_id, lat, lng } = req.query;
 
 
 export const getMarkerChart = asyncHandler(async (req, res) => {
-
     const { lake_id, lat, lng, year } = req.query;
 
     if (!lake_id || !lat || !lng || !year) {
-        throw new ApiError(
-            400,
-            "lake_id, lat, lng and year are required"
-        );
+        throw new ApiError(400, "lake_id, lat, lng and year are required");
     }
 
-    const result = await pool.query(
-        `
-        SELECT
-        EXTRACT(MONTH FROM created_at) AS month,
-        AVG(wqi) AS avg_wqi
+    const parsedLat    = parseFloat(lat);
+    const parsedLng    = parseFloat(lng);
+    const parsedYear   = parseInt(year, 10);
+    const parsedLakeId = parseInt(lake_id, 10);
 
-        FROM lake_marker_history
+    if (
+        isNaN(parsedLat) || isNaN(parsedLng) ||
+        isNaN(parsedYear) || isNaN(parsedLakeId)
+    ) {
+        throw new ApiError(400, "Invalid numeric values in query parameters");
+    }
 
-        WHERE lake_id = $1
-        AND geom = ST_SetSRID(ST_Point($2,$3),4326)
-        AND EXTRACT(YEAR FROM created_at) = $4
+    const startDate = `${parsedYear}-01-01`;
+    const endDate   = `${parsedYear + 1}-01-01`;
 
-        GROUP BY month
-        ORDER BY month
-        `,
-        [lake_id, lng, lat, year]
-    );
+    // Run both queries in parallel
+    const [wqiResult, paramsResult] = await Promise.all([
+
+        // WQI avg per month
+        pool.query(
+                  `
+            SELECT
+                EXTRACT(MONTH FROM created_at)::int AS month,
+                AVG(wqi) AS avg_wqi
+            FROM lake_marker_history
+            WHERE lake_id = $1
+              AND created_at >= $4
+              AND created_at < $5
+              AND ST_DWithin(
+                    geom,
+                    ST_SetSRID(ST_Point($2, $3), 4326),
+                    1e-8
+                  )
+            GROUP BY month
+            ORDER BY month
+            `,
+            [parsedLakeId, parsedLng, parsedLat, startDate, endDate]
+        ),
+
+        // All parameter keys available for this marker + year
+        // with their avg value per month
+        pool.query(
+            `
+            SELECT
+                key AS parameter,
+                EXTRACT(MONTH FROM created_at)::int AS month,
+                AVG(value::double precision) AS avg_value
+            FROM lake_marker_history
+            CROSS JOIN LATERAL jsonb_each_text(parameters)
+            WHERE lake_id = $1
+              AND created_at >= $4
+              AND created_at < $5
+              AND parameters IS NOT NULL
+              AND parameters <> '{}'
+              AND ST_DWithin(
+                    geom,
+                    ST_SetSRID(ST_Point($2, $3), 4326),
+                    1e-8
+                  )
+            GROUP BY key, month
+            ORDER BY key, month
+            `,
+            [parsedLakeId, parsedLng, parsedLat, startDate, endDate]
+        )
+    ]);
+
+    // Group parameter rows by param_key for easy frontend consumption
+    // { pH: [{month:1, avg_value:7.2}, ...], turbidity: [...], ... }
+    const parameters = paramsResult.rows.reduce((acc, row) => {
+        if (!acc[row.parameter]) acc[row.parameter] = [];
+        acc[row.parameter].push({
+            month:     row.month,
+            avg_value: parseFloat(row.avg_value)
+        });
+        return acc;
+    }, {});
 
     return res.status(200).json(
         new ApiResponse(
             200,
-            result.rows,
+            {
+                year: parsedYear,
+                wqi: wqiResult.rows.map(r => ({
+                    month:   r.month,
+                    avg_wqi: parseFloat(r.avg_wqi)
+                })),
+                parameters  // keys = available param names, values = monthly avg data
+            },
             "Chart data fetched successfully"
         )
     );
 });
 
 export const getMarkerYears = asyncHandler(async (req, res) => {
-
     const { lake_id, lat, lng } = req.query;
 
     if (!lake_id || !lat || !lng) {
         throw new ApiError(400, "lake_id, lat and lng are required");
     }
 
+    const parsedLat    = parseFloat(lat);
+    const parsedLng    = parseFloat(lng);
+    const parsedLakeId = parseInt(lake_id, 10);
+
+    if (isNaN(parsedLat) || isNaN(parsedLng) || isNaN(parsedLakeId)) {
+        throw new ApiError(400, "Invalid numeric values in query parameters");
+    }
+
     const result = await pool.query(
         `
-        SELECT DISTINCT
-        EXTRACT(YEAR FROM created_at) AS year
-
+        SELECT 
+             EXTRACT(YEAR FROM created_at)::int AS year
         FROM lake_marker_history
-
         WHERE lake_id = $1
-        AND geom = ST_SetSRID(ST_Point($2,$3),4326)
-
+          AND created_at >= '2015-01-01'
+          AND created_at < '2030-01-01'
+          AND ST_DWithin(
+                geom,
+                ST_SetSRID(ST_Point($2, $3), 4326),
+                1e-8
+              )
+        GROUP BY year
         ORDER BY year DESC
         `,
-        [lake_id, lng, lat]
+        [parsedLakeId, parsedLng, parsedLat]
     );
 
     return res.status(200).json(
         new ApiResponse(
             200,
-            result.rows,
+            result.rows.map(r => r.year),   // [2024, 2023, 2022]
             "Available years fetched successfully"
         )
     );
@@ -120,7 +193,7 @@ export const getMarkerYears = asyncHandler(async (req, res) => {
 
 export const getUserSubmissions = asyncHandler(async (req, res) => {
 
-    const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";;
+    const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -278,7 +351,7 @@ export const getSubmissionMarkers = asyncHandler(async (req, res) => {
             FROM temp_markers
             WHERE submission_id = $1
             AND lake_id = $2
-            ORDER BY ST_Y(geom), ST_X(geom)
+            ORDER BY id DESC
             LIMIT $3 OFFSET $4
             `,
             [submission_id, lake_id, limit, offset]
@@ -300,7 +373,7 @@ export const getSubmissionMarkers = asyncHandler(async (req, res) => {
             FROM lake_marker_history
             WHERE submission_id = $1
             AND lake_id = $2
-            ORDER BY ST_Y(geom), ST_X(geom)
+            ORDER BY id DESC
             LIMIT $3 OFFSET $4
             `,
             [submission_id, lake_id, limit, offset]
