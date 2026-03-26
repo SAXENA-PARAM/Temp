@@ -87,12 +87,16 @@ function buildClusterQuery(table) {
     SELECT ST_AsMVT(tile, 'markers', 4096, 'geom') AS mvt
     FROM (
       SELECT
-        is_cluster,
-        point_count,
-        avg_wqi,
-        ST_AsMVTGeom(geom_3857, bounds.geom, 4096, 256, true) AS geom
-      FROM ${table}, bounds
-      WHERE geom_3857 && bounds.geom
+        m.is_cluster,
+        m.point_count,
+        m.avg_wqi,
+        m.lake_id,
+        m.wqi,
+        ST_Y(m.geom) AS lat,
+        ST_X(m.geom) AS lng,
+        ST_AsMVTGeom(m.geom_3857, bounds.geom, 4096, 256, true) AS geom
+      FROM ${table} m, bounds
+      WHERE m.geom_3857 && bounds.geom
     ) tile
     WHERE geom IS NOT NULL
   `;
