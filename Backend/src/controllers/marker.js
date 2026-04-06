@@ -312,13 +312,13 @@ export const getLakeWiseWqiByCity = asyncHandler(async (req, res) => {
     `;
 
     const query2 = `
-    SELECT *
+    SELECT hylak_id AS lake_id, lake_name, avg_wqi, city_id, state_id, ST_Y(center) AS lat, ST_X(center) AS lng
     FROM lake_wqi_mv
     WHERE state_id = $1 AND city_id = $2
-    ORDER BY avg_wqi DESC;
+    ORDER BY avg_wqi DESC NULLS LAST;
     `;
 
-    const { rows } = await pool.query(query1, [state_id, city_id]);
+    const { rows } = await pool.query(query2, [state_id, city_id]);
 
     res.status(200).json({
       success: true,
