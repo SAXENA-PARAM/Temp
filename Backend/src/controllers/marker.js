@@ -92,8 +92,16 @@ function buildClusterQuery(table) {
         m.avg_wqi,
         m.lake_id,
         m.wqi,
+
+        -- 🔥 NEW FIELDS
+        m.city_id,
+        m.state_id,
+        m.city_name,
+        m.state_name,
+
         ST_Y(m.geom) AS lat,
         ST_X(m.geom) AS lng,
+
         ST_AsMVTGeom(m.geom_3857, bounds.geom, 4096, 256, true) AS geom
       FROM ${table} m, bounds
       WHERE m.geom_3857 && bounds.geom
@@ -114,13 +122,28 @@ const MARKER_QUERY = `
     SELECT
       m.id,
       m.lake_id,
-      m.wqi        AS wqi,
+      m.wqi AS avg_wqi,
+
+      -- 🔥 JOINED DATA
+      l.city_id,
+      l.state_id,
+      c.city_name,
+      s.state_name,
+
       ST_Y(m.geom) AS lat,
       ST_X(m.geom) AS lng,
-      FALSE        AS is_cluster,
-      1            AS point_count,
+
+      FALSE AS is_cluster,
+      1 AS point_count,
+
       ST_AsMVTGeom(m.geom_3857, bounds.geom, 4096, 64, true) AS geom
-    FROM latest_markers m, bounds
+
+    FROM latest_markers m
+    JOIN lakes l ON l.hylak_id = m.lake_id
+    JOIN cities_clean c ON c.id = l.city_id
+    JOIN states_clean s ON s.id = l.state_id,
+    bounds
+
     WHERE m.geom_3857 && bounds.geom
   ) tile
   WHERE geom IS NOT NULL
@@ -206,3 +229,108 @@ export const refreshClusters = async (req, res) => {
     return res.status(500).json({ error: "Cluster refresh failed" });
   }
 };
+
+export const getStateWiseWqi = asyncHandler(async (req, res) => {
+  try {
+    const query = `
+      SELECT state_id, state_name, avg_wqi, ST_Y(center) AS lat, ST_X(center) AS lng
+      FROM state_wqi
+      WHERE avg_wqi IS NOT NULL
+      ORDER BY avg_wqi DESC;
+    `;
+
+    const { rows } = await pool.query(query);
+
+    res.status(200).json({
+      success: true,
+      data: rows
+    });
+
+  } catch (error) {
+    console.error('Error fetching state WQI:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+
+export const getCityWiseWqi = asyncHandler(async (req, res) => {
+  const { state_id } = req.params;
+
+  try {
+    const query = `
+      SELECT city_id, city_name, state_id, avg_wqi, ST_Y(center) AS lat, ST_X(center) AS lng
+      FROM city_wqi_mv
+      WHERE state_id = $1 AND avg_wqi IS NOT NULL
+      ORDER BY avg_wqi DESC;
+    `;
+
+    const { rows } = await pool.query(query, [state_id]);
+
+    res.status(200).json({
+      success: true,
+      data: rows
+    });
+
+  } catch (error) {
+    console.error('Error fetching city WQI:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+export const getLakeWiseWqiByCity = asyncHandler(async (req, res) => {
+  let { state_id, city_id } = req.params;
+
+  state_id = parseInt(state_id);
+  city_id = parseInt(city_id);
+
+  if (isNaN(state_id) || isNaN(city_id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid state_id or city_id"
+    });
+  }
+
+  try {
+    const query1 = `
+      SELECT  
+          l.hylak_id AS lake_id,
+          l.lake_name,
+          ROUND(AVG(m.wqi)::numeric, 2) AS avg_wqi
+      FROM lakes l
+      LEFT JOIN latest_markers m 
+          ON m.lake_id = l.hylak_id
+      WHERE l.state_id = $1
+        AND l.city_id = $2
+      GROUP BY l.hylak_id, l.lake_name
+      ORDER BY avg_wqi DESC NULLS LAST;
+    `;
+
+    const query2 = `
+    SELECT *
+    FROM lake_wqi_mv
+    WHERE state_id = $1 AND city_id = $2
+    ORDER BY avg_wqi DESC;
+    `;
+
+    const { rows } = await pool.query(query1, [state_id, city_id]);
+
+    res.status(200).json({
+      success: true,
+      count: rows.length,
+      data: rows
+    });
+
+  } catch (error) {
+    console.error('Error fetching lake-wise WQI:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
