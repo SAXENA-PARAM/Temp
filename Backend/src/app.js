@@ -32,9 +32,11 @@ app.use(express.json());
 
 
 
+import riverRoutes from "./routes/river.routes.js"
 import lakeRoutes from "./routes/lake.routes.js"
 
 app.use("/api/lakes", lakeRoutes);
+app.use("/api/rivers", riverRoutes);
 
 
 app.use((err, req, res, next) => {

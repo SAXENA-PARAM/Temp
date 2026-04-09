@@ -95,6 +95,58 @@ const validateLakeData = asyncHandler(async (req, res) => {
   );
 });
 
+const validateRiverData = asyncHandler(async (req, res) => {
+  const { latitude, longitude } = req.body;
 
+  if (!latitude || !longitude) {
+    throw new ApiError(400, "Latitude and longitude are required");
+  }
 
-export { validateLakeData }
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+
+  if (isNaN(lat) || isNaN(lng)) {
+    throw new ApiError(400, "Invalid coordinates");
+  }
+
+  const query = `
+    SELECT 
+      hyriv_id,
+      ST_Distance(
+        geom::geography,
+        ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+      ) AS distance,
+      ST_AsGeoJSON(geom) AS geometry
+    FROM indian_rivers
+    WHERE ST_DWithin(
+      geom::geography,
+      ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+      $3
+    )
+    ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
+    LIMIT 1;
+  `;
+
+  const values = [longitude, latitude, 500];
+  const response = await client.query(query, values);
+  // Similar logic for rivers can be implemented here
+  if (response.rows.length === 0) {
+    throw new ApiError(404, "No nearby rivers found");
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        valid: true,
+        hyriv_id: response.rows[0].hyriv_id,
+        distance: response.rows[0].distance,
+        geometry: JSON.parse(response.rows[0].geometry) // 👈 important
+      },
+      "River validation successful"
+    )
+  );
+}
+);
+
+export { validateLakeData, validateRiverData }
