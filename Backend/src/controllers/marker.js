@@ -21,7 +21,15 @@ const ZOOM_BANDS = [
   { maxZoom: Infinity, table: "latest_markers"               },
 ];
 
-
+const RiVER_ZOOM_BANDS = [
+  { maxZoom: 3,        table: "river_marker_supercluster_z2"  },
+  { maxZoom: 5,        table: "river_marker_supercluster_z4"  },
+  { maxZoom: 7,        table: "river_marker_supercluster_z6"  },
+  { maxZoom: 10,       table: "river_marker_supercluster_z9"  },
+  { maxZoom: 12,       table: "river_marker_supercluster_z11" },
+  { maxZoom: 14,       table: "river_marker_supercluster_z13" },
+  { maxZoom: Infinity, table: "latest_river_markers"               },
+];
 
 const ALLOWED_TABLES = new Set(ZOOM_BANDS.map((b) => b.table));
 
@@ -48,6 +56,10 @@ function parseTileParam(value) {
 // ─────────────────────────────────────────────────────────────
 function resolveTable(z) {
   return ZOOM_BANDS.find((b) => z < b.maxZoom).table;
+}
+
+function resolveRiverTable(z) {
+  return RiVER_ZOOM_BANDS.find((b) => z < b.maxZoom).table;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -110,6 +122,29 @@ function buildClusterQuery(table) {
   `;
 }
 
+function buildRiverClusterQuery(table){
+  return `
+    WITH bounds AS (
+      SELECT ST_TileEnvelope($1, $2, $3) AS geom
+    )
+    SELECT ST_AsMVT(tile, 'markers', 4096, 'geom') AS mvt
+    FROM (
+      SELECT
+        m.is_cluster,
+        m.point_count,
+        m.avg_wqi,
+        m.river_id,
+        m.wqi,
+        ST_Y(m.geom) AS lat,
+        ST_X(m.geom) AS lng,
+
+        ST_AsMVTGeom(m.geom_3857, bounds.geom, 4096, 256, true) AS geom
+      FROM ${table} m, bounds
+      WHERE m.geom_3857 && bounds.geom
+    ) tile
+    WHERE geom IS NOT NULL
+  `;
+}
 // ─────────────────────────────────────────────────────────────
 // Individual marker query (z >= 14)
 // ─────────────────────────────────────────────────────────────
@@ -144,6 +179,32 @@ const MARKER_QUERY = `
     JOIN states_clean s ON s.id = l.state_id,
     bounds
 
+    WHERE m.geom_3857 && bounds.geom
+  ) tile
+  WHERE geom IS NOT NULL
+`;
+
+const RIVER_MARKER_QUERY = `
+  WITH bounds AS (
+    SELECT ST_TileEnvelope($1, $2, $3) AS geom
+  )
+  SELECT ST_AsMVT(tile, 'markers', 4096, 'geom') AS mvt
+  FROM (
+    SELECT
+      m.id,
+      m.river_id,
+      m.wqi AS avg_wqi,
+
+      ST_Y(m.geom) AS lat,
+      ST_X(m.geom) AS lng,
+
+      FALSE AS is_cluster,
+      1 AS point_count,
+
+      ST_AsMVTGeom(m.geom_3857, bounds.geom, 4096, 64, true) AS geom
+
+    FROM latest_river_markers m,
+    bounds
     WHERE m.geom_3857 && bounds.geom
   ) tile
   WHERE geom IS NOT NULL
@@ -334,3 +395,79 @@ export const getLakeWiseWqiByCity = asyncHandler(async (req, res) => {
     });
   }
 });
+
+export const getRiverMarkerTiles = asyncHandler(async (req, res) => {
+  const z = parseTileParam(req.params.z);
+  const x = parseTileParam(req.params.x);
+  const y = parseTileParam(req.params.y);
+
+  // 🔒 Always set CORS early (bulletproof)
+  
+
+  if (z === null || x === null || y === null) {
+    throw new ApiError(400, "Invalid tile coordinates");
+  }
+
+  if (z > 22) {
+    throw new ApiError(400, "Zoom must be 0–22");
+  }
+
+  const table = resolveRiverTable(z);
+
+  if (!ALLOWED_TABLES.has(table)) {
+    throw new ApiError(400, "Invalid table resolved");
+  }
+
+  try {
+    const sql =
+      table === "latest_markers"
+        ? RIVER_MARKER_QUERY
+        : buildRiverClusterQuery(table);
+
+    const result = await pool.query(sql, [z, x, y]);
+    const tile = result.rows[0]?.mvt;
+
+    // 🔥 IMPORTANT: never send 204 for tiles
+    if (!tile || tile.length === 0) {
+      return res.status(200).set({
+        "Content-Type": "application/x-protobuf",
+        "Cache-Control": `public, max-age=${TTL_BY_ZOOM(z)}`,
+        "X-Tile-Zoom": String(z),
+        "X-Tile-Table": table,
+      }).send(Buffer.alloc(0));
+    }
+
+    const { buffer, encoding } = await compressTile(tile, req);
+
+    res.set({
+      "Content-Type": "application/x-protobuf",
+      "Cache-Control": `public, max-age=${TTL_BY_ZOOM(z)}`,
+      "X-Tile-Zoom": String(z),
+      "X-Tile-Table": table,
+      ...(encoding && { "Content-Encoding": encoding }),
+    });
+
+    return res.status(200).send(buffer);
+
+  } catch (err) {
+    console.error(
+      `[markerTile] z=${z} x=${x} y=${y} table=${table}`,
+      err.message
+    );
+
+    throw new ApiError(500, "Tile generation failed");
+  }
+});
+
+export const refreshRiverClusters = async (req, res) => {
+  try {
+    const start = Date.now();
+    await pool.query("CALL refresh_river_clusters()");
+    const durationMs = Date.now() - start;
+    console.log(`[refreshRiverClusters] completed in ${durationMs}ms`);
+    return res.json({ success: true, durationMs });
+  } catch (err) {
+    console.error("[refreshRiverClusters]", err.message);
+    return res.status(500).json({ error: "Cluster refresh failed" });
+  }
+};

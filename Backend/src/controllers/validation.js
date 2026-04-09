@@ -128,7 +128,7 @@ const validateRiverData = asyncHandler(async (req, res) => {
   `;
 
   const values = [longitude, latitude, 500];
-  const response = await client.query(query, values);
+  const response = await pool.query(query, values);
   // Similar logic for rivers can be implemented here
   if (response.rows.length === 0) {
     throw new ApiError(404, "No nearby rivers found");
@@ -139,7 +139,7 @@ const validateRiverData = asyncHandler(async (req, res) => {
       200,
       {
         valid: true,
-        hyriv_id: response.rows[0].hyriv_id,
+        river_id: response.rows[0].hyriv_id,
         distance: response.rows[0].distance,
         geometry: JSON.parse(response.rows[0].geometry) // 👈 important
       },

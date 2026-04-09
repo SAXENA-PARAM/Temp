@@ -36,3 +36,34 @@ async def fetch_markers(conn: asyncpg.Connection, submission_id: str) -> list[di
             "observed_at": r["observed_at"],
         })
     return result
+
+
+async def fetch_river_markers(conn: asyncpg.Connection, submission_id: str) -> list[dict]:
+    rows = await conn.fetch(
+        """
+        SELECT
+            river_id,
+            ST_Y(geom)  AS lat,
+            ST_X(geom)  AS lng,
+            parameters,
+            created_by,
+            created_at AS observed_at
+        FROM temp_river_markers
+        WHERE submission_id = $1
+        """,
+        submission_id,
+    )
+    result = []
+    for r in rows:
+        params = r["parameters"]
+        if isinstance(params, str):
+            params = json.loads(params)
+        result.append({
+            "river_id":   r["river_id"],
+            "lat":        float(r["lat"]),
+            "lng":        float(r["lng"]),
+            "parameters": params or {},
+            "created_by": r["created_by"],
+            "observed_at": r["observed_at"],
+        })
+    return result
