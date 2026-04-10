@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { validateLakeData } from "../controllers/validation.js";
 import { submitData } from "../controllers/submission.js";
-import { markerHistory, getMarkerChart, getMarkerYears ,getSubmissionLakes, getSubmissionMarkers , getUserSubmissions} from "../controllers/history.js";
+import { markerHistory, getMarkerChart, getMarkerYears ,getSubmissionLakes, getSubmissionMarkers , getUserSubmissions, getCCMEChart , getLatestCCME} from "../controllers/history.js";
 import  { getMarkerTiles, refreshClusters , getStateWiseWqi, getCityWiseWqi,getLakeWiseWqiByCity} from '../controllers/marker.js';
 
 //import { asyncHandler } from "../utils/asynchandler.js";
@@ -16,6 +16,8 @@ router.route("/submit").post(submitData);
 router.route("/marker-history").get(markerHistory);
 router.route("/marker-chart").get(getMarkerChart);
 router.route("/marker-years").get(getMarkerYears);
+router.route("/ccme-chart").get(getCCMEChart);
+router.route("/latest-ccme").get(getLatestCCME);
 router.route("/submissions").get(getUserSubmissions);
 router.route("/submissions/:submission_id/lakes").get(getSubmissionLakes);
 router.route("/submissions/:submission_id/markers").get(getSubmissionMarkers);

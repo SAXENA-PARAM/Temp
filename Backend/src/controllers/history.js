@@ -780,3 +780,118 @@ export const getRiverSubmissionMarkers =asyncHandler(async (req, res) => {
     );
 
 });
+
+
+export const getCCMEChart = asyncHandler(async (req, res) => {
+    const { lake_id, lat, lng } = req.query;
+
+    if (!lake_id || !lat || !lng) {
+        throw new ApiError(400, "lake_id, lat and lng are required");
+    }
+
+    const parsedLat    = parseFloat(lat);
+    const parsedLng    = parseFloat(lng);
+    const parsedLakeId = parseInt(lake_id, 10);
+
+    if (isNaN(parsedLat) || isNaN(parsedLng) || isNaN(parsedLakeId)) {
+        throw new ApiError(400, "Invalid numeric values in query parameters");
+    }
+
+    const result = await pool.query(
+        `
+        SELECT
+            year,
+            f1,
+            f2,
+            f3,
+            ccme_wqi
+        FROM lake_ccme_wqi
+        WHERE lake_id = $1
+          AND ST_DWithin(
+                geom,
+                ST_SetSRID(ST_Point($2, $3), 4326),
+                1e-8
+              )
+        ORDER BY year ASC
+        `,
+        [parsedLakeId, parsedLng, parsedLat]
+    );
+
+    if (result.rows.length === 0) {
+        throw new ApiError(404, "No CCME WQI data found for this location");
+    }
+
+    const data = result.rows.map(row => ({
+        year:     row.year,
+        f1:       parseFloat(row.f1),
+        f2:       parseFloat(row.f2),
+        f3:       parseFloat(row.f3),
+        ccme_wqi: parseFloat(row.ccme_wqi)
+    }));
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            { lake_id: parsedLakeId, data },
+            "CCME WQI chart data fetched successfully"
+        )
+    );
+});
+
+export const getLatestCCME = asyncHandler(async (req, res) => {
+    const { lake_id, lat, lng } = req.query;
+
+    if (!lake_id || !lat || !lng) {
+        throw new ApiError(400, "lake_id, lat and lng are required");
+    }
+
+    const parsedLat    = parseFloat(lat);
+    const parsedLng    = parseFloat(lng);
+    const parsedLakeId = parseInt(lake_id, 10);
+
+    if (isNaN(parsedLat) || isNaN(parsedLng) || isNaN(parsedLakeId)) {
+        throw new ApiError(400, "Invalid numeric values in query parameters");
+    }
+
+    const result = await pool.query(
+        `
+        SELECT
+            year,
+            f1,
+            f2,
+            f3,
+            ccme_wqi
+        FROM lake_ccme_wqi
+        WHERE lake_id = $1
+          AND ST_DWithin(
+                geom,
+                ST_SetSRID(ST_Point($2, $3), 4326),
+                1e-8
+              )
+        ORDER BY year DESC
+        LIMIT 1
+        `,
+        [parsedLakeId, parsedLng, parsedLat]
+    );
+
+    if (result.rows.length === 0) {
+        throw new ApiError(404, "No CCME WQI data found for this location");
+    }
+
+    const row = result.rows[0];
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                lake_id:  parsedLakeId,
+                year:     row.year,
+                f1:       parseFloat(row.f1),
+                f2:       parseFloat(row.f2),
+                f3:       parseFloat(row.f3),
+                ccme_wqi: parseFloat(row.ccme_wqi)
+            },
+            "Latest CCME WQI fetched successfully"
+        )
+    );
+});

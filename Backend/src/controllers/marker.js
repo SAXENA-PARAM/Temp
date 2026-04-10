@@ -31,7 +31,10 @@ const RiVER_ZOOM_BANDS = [
   { maxZoom: Infinity, table: "latest_river_markers"               },
 ];
 
-const ALLOWED_TABLES = new Set(ZOOM_BANDS.map((b) => b.table));
+const ALLOWED_TABLES = new Set([
+  ...ZOOM_BANDS.map((b) => b.table),
+  ...RiVER_ZOOM_BANDS.map((b) => b.table)
+]);
 
 const TTL_BY_ZOOM = (z) => {
   if (z <= 6)  return 86400;
@@ -420,7 +423,7 @@ export const getRiverMarkerTiles = asyncHandler(async (req, res) => {
 
   try {
     const sql =
-      table === "latest_markers"
+      table === "latest_river_markers"
         ? RIVER_MARKER_QUERY
         : buildRiverClusterQuery(table);
 
@@ -451,7 +454,7 @@ export const getRiverMarkerTiles = asyncHandler(async (req, res) => {
 
   } catch (err) {
     console.error(
-      `[markerTile] z=${z} x=${x} y=${y} table=${table}`,
+      `[getRiverMarkerTile] z=${z} x=${x} y=${y} table=${table}`,
       err.message
     );
 
