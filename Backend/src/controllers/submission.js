@@ -126,9 +126,9 @@ export const submitRiverData = asyncHandler(async (req, res) => {
   if (!markers || !Array.isArray(markers) || markers.length === 0) {
     throw new ApiError(400, "markers array is required and must not be empty");
   }
-  if (markers.length > 50) {
-    throw new ApiError(400, "Maximum 50 markers allowed per submission");
-  }
+  // if (markers.length > 50) {
+  //   throw new ApiError(400, "Maximum 50 markers allowed per submission");
+  // }
 
   const markerErrors = [];
   markers.forEach((m, i) => {

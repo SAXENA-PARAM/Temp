@@ -311,8 +311,6 @@ export const getMarkerYears = asyncHandler(async (req, res) => {
              EXTRACT(YEAR FROM created_at)::int AS year
         FROM lake_marker_history
         WHERE lake_id = $1
-          AND created_at >= '2015-01-01'
-          AND created_at < '2030-01-01'
           AND ST_DWithin(
                 geom,
                 ST_SetSRID(ST_Point($2, $3), 4326),
@@ -354,8 +352,6 @@ export const RiverMarkerYears = asyncHandler(async (req, res) => {
              EXTRACT(YEAR FROM created_at)::int AS year
         FROM river_marker_history
         WHERE river_id = $1
-          AND created_at >= '2015-01-01'
-          AND created_at < '2030-01-01'
           AND ST_DWithin(
                 geom,
                 ST_SetSRID(ST_Point($2, $3), 4326),
