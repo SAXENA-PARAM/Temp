@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { validateRiverData } from "../controllers/validation.js";
 import { submitRiverData } from "../controllers/submission.js";
-import { RiverMarkerHistory, RiverMarkerChart, RiverMarkerYears, getUserRiverSubmissions, getSubmissionRivers, getRiverSubmissionMarkers} from "../controllers/history.js";
+import { RiverMarkerHistory, RiverMarkerChart, RiverMarkerYears, getUserRiverSubmissions, getSubmissionRivers, getRiverSubmissionMarkers,getRiverCCMEChart, getRiverLatestCCME} from "../controllers/history.js";
 import  { getRiverMarkerTiles, refreshRiverClusters } from '../controllers/marker.js';
 
 
@@ -21,6 +21,14 @@ router.route("/submissions/:submission_id/lakes").get(getSubmissionRivers);
 router.route("/submissions/:submission_id/markers").get(getRiverSubmissionMarkers);
 router.get('/markers/:z/:x/:y.mvt', getRiverMarkerTiles);
 router.post('/markers/refresh', refreshRiverClusters);
+
+
+router.route("/ccme-chart").get(getRiverCCMEChart);
+router.route("/latest-ccme").get(getRiverLatestCCME);
+
+// router.get('/states/wqi', getStateWiseWqi);
+// router.get('/cities/wqi/:state_id', getCityWiseWqi);
+// router.get('/lakes/wqi/:state_id/:city_id', getLakeWiseWqiByCity);
 
 
 
