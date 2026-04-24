@@ -131,38 +131,51 @@ export const submitRiverData = asyncHandler(async (req, res) => {
   }
 
   const markerErrors = [];
-markers.forEach((m, i) => {
-  if (!m.river_id) markerErrors.push(`markers[${i}]: river_id is required`);
+  markers.forEach((m, i) => {
+    if (!m.river_id) markerErrors.push(`markers[${i}]: river_id is required`);
 
-  if (m.lat == null) {
-    markerErrors.push(`markers[${i}]: lat is required`);
-  } else if (isNaN(parseFloat(m.lat))) {
-    markerErrors.push(`markers[${i}]: lat must be a number`);
-  } else if (parseFloat(m.lat) < -90 || parseFloat(m.lat) > 90) {
-    markerErrors.push(`markers[${i}]: lat must be between -90 and 90`);
-  }
+    if (m.lat == null) {
+      markerErrors.push(`markers[${i}]: lat is required`);
+    } else if (isNaN(parseFloat(m.lat))) {
+      markerErrors.push(`markers[${i}]: lat must be a number`);
+    } else if (parseFloat(m.lat) < -90 || parseFloat(m.lat) > 90) {
+      markerErrors.push(`markers[${i}]: lat must be between -90 and 90`);
+    }
 
-  if (m.lng == null) {
-    markerErrors.push(`markers[${i}]: lng is required`);
-  } else if (isNaN(parseFloat(m.lng))) {
-    markerErrors.push(`markers[${i}]: lng must be a number`);
-  } else if (parseFloat(m.lng) < -180 || parseFloat(m.lng) > 180) {
-    markerErrors.push(`markers[${i}]: lng must be between -180 and 180`);
-  }
+    if (m.lng == null) {
+      markerErrors.push(`markers[${i}]: lng is required`);
+    } else if (isNaN(parseFloat(m.lng))) {
+      markerErrors.push(`markers[${i}]: lng must be a number`);
+    } else if (parseFloat(m.lng) < -180 || parseFloat(m.lng) > 180) {
+      markerErrors.push(`markers[${i}]: lng must be between -180 and 180`);
+    }
 
-  if (!m.parameters || typeof m.parameters !== "object" || Array.isArray(m.parameters)) {
-    markerErrors.push(`markers[${i}]: parameters must be a non-empty object`);
-  } else if (Object.keys(m.parameters).length === 0) {
-    markerErrors.push(`markers[${i}]: parameters must not be empty`);
-  }
+    if (
+      !m.parameters ||
+      typeof m.parameters !== "object" ||
+      Array.isArray(m.parameters)
+    ) {
+      markerErrors.push(`markers[${i}]: parameters must be a non-empty object`);
+    } else if (Object.keys(m.parameters).length === 0) {
+      markerErrors.push(`markers[${i}]: parameters must not be empty`);
+    }
 
-  if (m.observed_at && isNaN(new Date(m.observed_at))) {
-    markerErrors.push(`markers[${i}]: observed_at is not a valid date`);
+    if (m.observed_at && isNaN(new Date(m.observed_at))) {
+      markerErrors.push(`markers[${i}]: observed_at is not a valid date`);
+    }
+
+    // basin / sub_basin — optional, but if provided must be strings
+    if (m.basin != null && typeof m.basin !== "string") {
+      markerErrors.push(`markers[${i}]: basin must be a string`);
+    }
+    if (m.sub_basin != null && typeof m.sub_basin !== "string") {
+      markerErrors.push(`markers[${i}]: sub_basin must be a string`);
+    }
+  });
+
+  if (markerErrors.length > 0) {
+    throw new ApiError(400, "Marker validation failed", markerErrors);
   }
-});
-if (markerErrors.length > 0) {
-  throw new ApiError(400, "Marker validation failed", markerErrors);
-}
 
   // ── DB ────────────────────────────────────────────────────────────────────
   const client = await pool.connect();
@@ -171,7 +184,6 @@ if (markerErrors.length > 0) {
 
     const submissionId = uuidv4();
 
-    // observed_at not passed — Postgres DEFAULT NOW() fills it
     await client.query(
       `INSERT INTO river_submissions (id, user_id, status)
        VALUES ($1, $2, 'pending')`,
@@ -179,31 +191,38 @@ if (markerErrors.length > 0) {
     );
 
     const riverIds     = markers.map((m) => m.river_id);
-    const lats        = markers.map((m) => parseFloat(m.lat));
-    const lngs        = markers.map((m) => parseFloat(m.lng));
-    const parameters  = markers.map((m) => JSON.stringify(m.parameters));
-    const observedAts = markers.map((m) =>
+    const lats         = markers.map((m) => parseFloat(m.lat));
+    const lngs         = markers.map((m) => parseFloat(m.lng));
+    const parameters   = markers.map((m) => JSON.stringify(m.parameters));
+    const observedAts  = markers.map((m) =>
       m.observed_at ? new Date(m.observed_at) : new Date()
     );
+    // Normalise: undefined/null → null, empty string → null
+    const basins       = markers.map((m) => m.basin?.trim()     || null);
+    const subBasins    = markers.map((m) => m.sub_basin?.trim() || null);
 
     await client.query(
       `INSERT INTO temp_river_markers
-         (submission_id, river_id, geom, parameters, created_by, created_at)
+         (submission_id, river_id, geom, parameters, created_by, created_at, basin, sub_basin)
        SELECT
          $1,
          river_id,
          ST_SetSRID(ST_Point(lng, lat), 4326),
          param::jsonb,
          $2,
-         obs_at
+         obs_at,
+         basin,
+         sub_basin
        FROM UNNEST(
          $3::int[],
          $4::float8[],
          $5::float8[],
          $6::text[],
-         $7::timestamptz[]
-       ) AS t(river_id, lat, lng, param, obs_at)`,
-      [submissionId, userId, riverIds, lats, lngs, parameters, observedAts]
+         $7::timestamptz[],
+         $8::text[],
+         $9::text[]
+       ) AS t(river_id, lat, lng, param, obs_at, basin, sub_basin)`,
+      [submissionId, userId, riverIds, lats, lngs, parameters, observedAts, basins, subBasins]
     );
 
     await client.query("COMMIT");

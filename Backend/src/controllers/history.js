@@ -63,7 +63,9 @@ export const RiverMarkerHistory = asyncHandler(async (req, res) => {
             parameters,
             wqi,
             created_by,
-            created_at
+            created_at,
+            basin,
+            sub_basin
         FROM river_marker_history
         WHERE river_id = $1
         AND  ST_DWithin(geom, ST_SetSRID(ST_Point($2, $3), 4326), 1e-8)
@@ -73,14 +75,16 @@ export const RiverMarkerHistory = asyncHandler(async (req, res) => {
         [river_id, lng, lat, limit, offset]
     );
 
+    const results = history.rows.map(({ basin, sub_basin, ...rest }) => ({
+        ...rest,
+        ...(basin     && { basin }),
+        ...(sub_basin && { sub_basin }),
+    }));
+
     return res.status(200).json(
         new ApiResponse(
             200,
-            {
-                page,
-                limit,
-                results: history.rows
-            },
+            { page, limit, results },
             "Marker history fetched"
         )
     );
@@ -686,12 +690,12 @@ export const getSubmissionMarkers = asyncHandler(async (req, res) => {
 });
 
 
-export const getRiverSubmissionMarkers =asyncHandler(async (req, res) => {
+export const getRiverSubmissionMarkers = asyncHandler(async (req, res) => {
 
     const { submission_id } = req.params;
     const { river_id } = req.query;
 
-     const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";
+    const userId = "95c3371a-3bc6-4f39-bbba-bbf43de38921";
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -723,17 +727,18 @@ export const getRiverSubmissionMarkers =asyncHandler(async (req, res) => {
 
     let markers;
 
-    // pending / processing markers
-    if (status === "pending" || status === "processing" || status==="error") {
+    if (status === "pending" || status === "processing" || status === "error") {
 
         markers = await pool.query(
             `
             SELECT
-            river_id,
-            ST_Y(geom) AS lat,
-            ST_X(geom) AS lng,
-            parameters,
-            created_at
+                river_id,
+                ST_Y(geom) AS lat,
+                ST_X(geom) AS lng,
+                parameters,
+                created_at,
+                basin,
+                sub_basin
             FROM temp_river_markers
             WHERE submission_id = $1
             AND river_id = $2
@@ -745,17 +750,18 @@ export const getRiverSubmissionMarkers =asyncHandler(async (req, res) => {
 
     } else {
 
-        // processed markers
         markers = await pool.query(
             `
             SELECT
-            river_id,
-            ST_Y(geom) AS lat,
-            ST_X(geom) AS lng,
-            parameters,
-            satellite_data,
-            wqi,
-            created_at
+                river_id,
+                ST_Y(geom) AS lat,
+                ST_X(geom) AS lng,
+                parameters,
+                satellite_data,
+                wqi,
+                created_at,
+                basin,
+                sub_basin
             FROM river_marker_history
             WHERE submission_id = $1
             AND river_id = $2
@@ -766,6 +772,12 @@ export const getRiverSubmissionMarkers =asyncHandler(async (req, res) => {
         );
     }
 
+    const results = markers.rows.map(({ basin, sub_basin, ...rest }) => ({
+        ...rest,
+        ...(basin     && { basin }),
+        ...(sub_basin && { sub_basin }),
+    }));
+
     return res.status(200).json(
         new ApiResponse(
             200,
@@ -773,14 +785,13 @@ export const getRiverSubmissionMarkers =asyncHandler(async (req, res) => {
                 status,
                 page,
                 limit,
-                markers: markers.rows
+                markers: results
             },
             "Submission markers fetched"
         )
     );
 
 });
-
 
 export const getCCMEChart = asyncHandler(async (req, res) => {
     const { lake_id, lat, lng } = req.query;

@@ -197,20 +197,27 @@ async def process_river_submission(job, job_token):
                         f"[RIVER][{submission_id}] river_id={m['river_id']}: WQI is NULL"
                     )
 
+                # pull basin/sub_basin — may be None if not submitted
+                basin     = m.get("basin")
+                sub_basin = m.get("sub_basin")
+
                 await conn.execute(
                     """
                     INSERT INTO river_marker_history
                         (submission_id, river_id, geom,
-                         parameters, wqi, created_by, created_at)
+                         parameters, wqi, created_by, created_at,
+                         basin, sub_basin)
                     VALUES
                         ($1, $2,
                          ST_SetSRID(ST_Point($3, $4), 4326),
-                         $5::jsonb, $6, $7, $8)
+                         $5::jsonb, $6, $7, $8,
+                         $9, $10)
                     """,
                     submission_id, m["river_id"],
                     m["lng"], m["lat"],
                     json.dumps(m["parameters"]),
                     wqi_score, m["created_by"], m["observed_at"],
+                    basin, sub_basin,
                 )
 
                 await conn.execute(

@@ -37,7 +37,6 @@ async def fetch_markers(conn: asyncpg.Connection, submission_id: str) -> list[di
         })
     return result
 
-
 async def fetch_river_markers(conn: asyncpg.Connection, submission_id: str) -> list[dict]:
     rows = await conn.fetch(
         """
@@ -47,7 +46,9 @@ async def fetch_river_markers(conn: asyncpg.Connection, submission_id: str) -> l
             ST_X(geom)  AS lng,
             parameters,
             created_by,
-            created_at AS observed_at
+            created_at AS observed_at,
+            basin,
+            sub_basin
         FROM temp_river_markers
         WHERE submission_id = $1
         """,
@@ -65,5 +66,7 @@ async def fetch_river_markers(conn: asyncpg.Connection, submission_id: str) -> l
             "parameters": params or {},
             "created_by": r["created_by"],
             "observed_at": r["observed_at"],
+            "basin":      r["basin"],
+            "sub_basin":  r["sub_basin"],
         })
     return result
